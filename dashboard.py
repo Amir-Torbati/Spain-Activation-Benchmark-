@@ -138,7 +138,7 @@ def apply_theme() -> None:
             padding: 9px 12px;
         }}
 
-        div[data-testid="stRadio"] label {{
+        div[data-testid="stSlider"] label {{
             font-size: 0.86rem;
         }}
 
@@ -674,34 +674,27 @@ def build_summary_table(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).round(4)
 
 
-def apply_time_span_ribbon(df: pd.DataFrame, selected_span: str) -> pd.DataFrame:
-    if df.empty or selected_span == "All":
+def apply_time_window(df: pd.DataFrame, selected_window: tuple[object, object]) -> pd.DataFrame:
+    if df.empty:
         return df.copy()
 
-    days_by_span = {
-        "7D": 7,
-        "14D": 14,
-        "30D": 30,
-        "60D": 60,
-        "90D": 90,
-    }
-    days = days_by_span[selected_span]
-    end_hour = df["hour"].max()
-    start_hour = end_hour - pd.Timedelta(days=days)
-    return df[df["hour"] >= start_hour].copy()
+    start_date, end_date = selected_window
+    return df[(df["date"] >= start_date) & (df["date"] <= end_date)].copy()
 
 
-def render_time_window_note(df: pd.DataFrame, selected_span: str) -> None:
+def render_time_window_note(df: pd.DataFrame, selected_window: tuple[object, object]) -> None:
     if df.empty:
         return
 
     start_hour = df["hour"].min().strftime("%Y-%m-%d %H:%M")
     end_hour = df["hour"].max().strftime("%Y-%m-%d %H:%M")
+    selected_start, selected_end = selected_window
     st.markdown(
         f"""
         <div class="time-window-note">
-            Time-series window: <strong>{selected_span}</strong> | {len(df):,} hourly records |
-            {start_hour} to {end_hour}. Drag the small range slider under each chart for fine zoom.
+            Time-series window: <strong>{selected_start} to {selected_end}</strong> |
+            {len(df):,} hourly records | {start_hour} to {end_hour}.
+            Use this ribbon for quick date zoom, then drag the small range slider under each chart for fine zoom.
         </div>
         """,
         unsafe_allow_html=True,
@@ -859,15 +852,16 @@ def main() -> None:
         )
 
     with details_tab:
-        selected_span = st.radio(
-            "Time span ribbon",
-            ["All", "7D", "14D", "30D", "60D", "90D"],
-            horizontal=True,
-            index=0,
-            help="Quickly zoom the time-series charts inside the selected sidebar date range.",
+        selected_window = st.slider(
+            "Time-series date ribbon",
+            min_value=filtered["date"].min(),
+            max_value=filtered["date"].max(),
+            value=(filtered["date"].min(), filtered["date"].max()),
+            format="YYYY-MM-DD",
+            help="Drag the handles to zoom the time-series charts inside the selected sidebar date range.",
         )
-        timeseries_df = apply_time_span_ribbon(filtered, selected_span)
-        render_time_window_note(timeseries_df, selected_span)
+        timeseries_df = apply_time_window(filtered, selected_window)
+        render_time_window_note(timeseries_df, selected_window)
 
         st.markdown('<div class="section-label">Activated MW time series</div>', unsafe_allow_html=True)
         st.plotly_chart(
