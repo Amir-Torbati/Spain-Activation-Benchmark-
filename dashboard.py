@@ -472,6 +472,74 @@ def build_timeseries_figure(df: pd.DataFrame, directions: list[str]) -> go.Figur
     return fig
 
 
+def build_quantity_timeseries_figure(
+    df: pd.DataFrame,
+    directions: list[str],
+    up_col: str,
+    down_col: str,
+    up_name: str,
+    down_name: str,
+    yaxis_title: str,
+) -> go.Figure:
+    fig = go.Figure()
+    if "Up" in directions:
+        fig.add_trace(
+            go.Scatter(
+                x=df["hour"],
+                y=df[up_col],
+                mode="lines",
+                name=up_name,
+                line={"color": EXCEL_GREEN, "width": 1.7},
+                hovertemplate=f"{up_name}<br>%{{x}}<br>%{{y:,.1f}} MW<extra></extra>",
+            )
+        )
+    if "Down" in directions:
+        fig.add_trace(
+            go.Scatter(
+                x=df["hour"],
+                y=df[down_col],
+                mode="lines",
+                name=down_name,
+                line={"color": EXCEL_MID_GREEN, "width": 1.7},
+                hovertemplate=f"{down_name}<br>%{{x}}<br>%{{y:,.1f}} MW<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        **plotly_layout(340),
+        xaxis_title="Hour",
+        yaxis_title=yaxis_title,
+        yaxis={"tickformat": ",.0f"},
+    )
+    fig.update_xaxes(showgrid=True, gridcolor=GRID_GREEN, zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor=GRID_GREEN, zeroline=False)
+    return fig
+
+
+def build_activation_mw_figure(df: pd.DataFrame, directions: list[str]) -> go.Figure:
+    return build_quantity_timeseries_figure(
+        df,
+        directions,
+        "activated_up",
+        "activated_dn",
+        "Activated up",
+        "Activated down",
+        "Activated MW",
+    )
+
+
+def build_reserve_mw_figure(df: pd.DataFrame, directions: list[str]) -> go.Figure:
+    return build_quantity_timeseries_figure(
+        df,
+        directions,
+        "reserve_up",
+        "reserve_dn",
+        "Reserve up",
+        "Reserve down",
+        "Reserve MW",
+    )
+
+
 def build_hourly_model_table(df: pd.DataFrame) -> pd.DataFrame:
     grouped = df.groupby("hour_of_day")
     table = pd.DataFrame(
@@ -642,7 +710,7 @@ def main() -> None:
     render_kpi_grid(filtered)
 
     distribution_tab, hourly_tab, details_tab = st.tabs(
-        ["Distribution benchmark", "Hourly model assumptions", "Detail checks"]
+        ["Distribution benchmark", "Hourly model assumptions", "Time series checks"]
     )
 
     with distribution_tab:
@@ -721,7 +789,13 @@ def main() -> None:
         )
 
     with details_tab:
-        st.markdown('<div class="section-label">Hourly activation time series</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Activated MW time series</div>', unsafe_allow_html=True)
+        st.plotly_chart(build_activation_mw_figure(filtered, directions), width="stretch", config=PLOT_CONFIG)
+
+        st.markdown('<div class="section-label">Reserve MW time series</div>', unsafe_allow_html=True)
+        st.plotly_chart(build_reserve_mw_figure(filtered, directions), width="stretch", config=PLOT_CONFIG)
+
+        st.markdown('<div class="section-label">Activation portion time series</div>', unsafe_allow_html=True)
         st.plotly_chart(build_timeseries_figure(filtered, directions), width="stretch", config=PLOT_CONFIG)
 
         with st.expander("Database preview"):
