@@ -127,6 +127,21 @@ def apply_theme() -> None:
             padding: 10px 12px;
         }}
 
+        .time-window-note {{
+            background: #FFFFFF;
+            border: 1px solid #D9EAD3;
+            border-left: 5px solid var(--excel-mid-green);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 0.86rem;
+            margin: 4px 0 14px 0;
+            padding: 9px 12px;
+        }}
+
+        div[data-testid="stRadio"] label {{
+            font-size: 0.86rem;
+        }}
+
         .kpi-grid {{
             display: grid;
             grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -439,7 +454,20 @@ def build_cdf_figure(df: pd.DataFrame, directions: list[str]) -> go.Figure:
     return fig
 
 
-def build_timeseries_figure(df: pd.DataFrame, directions: list[str]) -> go.Figure:
+def apply_timeseries_axis(fig: go.Figure, show_range_slider: bool = False) -> None:
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor=GRID_GREEN,
+        zeroline=False,
+        rangeslider={"visible": show_range_slider, "thickness": 0.08},
+    )
+
+
+def build_timeseries_figure(
+    df: pd.DataFrame,
+    directions: list[str],
+    show_range_slider: bool = False,
+) -> go.Figure:
     fig = go.Figure()
     if "Up" in directions:
         fig.add_trace(
@@ -467,7 +495,7 @@ def build_timeseries_figure(df: pd.DataFrame, directions: list[str]) -> go.Figur
         xaxis_title="Hour",
         yaxis_title="Activation portion (%)",
     )
-    fig.update_xaxes(showgrid=True, gridcolor=GRID_GREEN, zeroline=False)
+    apply_timeseries_axis(fig, show_range_slider)
     fig.update_yaxes(showgrid=True, gridcolor=GRID_GREEN, zeroline=False)
     return fig
 
@@ -480,6 +508,7 @@ def build_quantity_timeseries_figure(
     up_name: str,
     down_name: str,
     yaxis_title: str,
+    show_range_slider: bool = False,
 ) -> go.Figure:
     fig = go.Figure()
     if "Up" in directions:
@@ -511,12 +540,16 @@ def build_quantity_timeseries_figure(
         yaxis_title=yaxis_title,
         yaxis={"tickformat": ",.0f"},
     )
-    fig.update_xaxes(showgrid=True, gridcolor=GRID_GREEN, zeroline=False)
+    apply_timeseries_axis(fig, show_range_slider)
     fig.update_yaxes(showgrid=True, gridcolor=GRID_GREEN, zeroline=False)
     return fig
 
 
-def build_activation_mw_figure(df: pd.DataFrame, directions: list[str]) -> go.Figure:
+def build_activation_mw_figure(
+    df: pd.DataFrame,
+    directions: list[str],
+    show_range_slider: bool = False,
+) -> go.Figure:
     return build_quantity_timeseries_figure(
         df,
         directions,
@@ -525,10 +558,15 @@ def build_activation_mw_figure(df: pd.DataFrame, directions: list[str]) -> go.Fi
         "Activated up",
         "Activated down",
         "Activated MW",
+        show_range_slider,
     )
 
 
-def build_reserve_mw_figure(df: pd.DataFrame, directions: list[str]) -> go.Figure:
+def build_reserve_mw_figure(
+    df: pd.DataFrame,
+    directions: list[str],
+    show_range_slider: bool = False,
+) -> go.Figure:
     return build_quantity_timeseries_figure(
         df,
         directions,
@@ -537,6 +575,7 @@ def build_reserve_mw_figure(df: pd.DataFrame, directions: list[str]) -> go.Figur
         "Reserve up",
         "Reserve down",
         "Reserve MW",
+        show_range_slider,
     )
 
 
@@ -633,6 +672,40 @@ def build_summary_table(df: pd.DataFrame) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(rows).round(4)
+
+
+def apply_time_span_ribbon(df: pd.DataFrame, selected_span: str) -> pd.DataFrame:
+    if df.empty or selected_span == "All":
+        return df.copy()
+
+    days_by_span = {
+        "7D": 7,
+        "14D": 14,
+        "30D": 30,
+        "60D": 60,
+        "90D": 90,
+    }
+    days = days_by_span[selected_span]
+    end_hour = df["hour"].max()
+    start_hour = end_hour - pd.Timedelta(days=days)
+    return df[df["hour"] >= start_hour].copy()
+
+
+def render_time_window_note(df: pd.DataFrame, selected_span: str) -> None:
+    if df.empty:
+        return
+
+    start_hour = df["hour"].min().strftime("%Y-%m-%d %H:%M")
+    end_hour = df["hour"].max().strftime("%Y-%m-%d %H:%M")
+    st.markdown(
+        f"""
+        <div class="time-window-note">
+            Time-series window: <strong>{selected_span}</strong> | {len(df):,} hourly records |
+            {start_hour} to {end_hour}. Drag the small range slider under each chart for fine zoom.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def filter_data(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
@@ -786,17 +859,39 @@ def main() -> None:
         )
 
     with details_tab:
+        selected_span = st.radio(
+            "Time span ribbon",
+            ["All", "7D", "14D", "30D", "60D", "90D"],
+            horizontal=True,
+            index=0,
+            help="Quickly zoom the time-series charts inside the selected sidebar date range.",
+        )
+        timeseries_df = apply_time_span_ribbon(filtered, selected_span)
+        render_time_window_note(timeseries_df, selected_span)
+
         st.markdown('<div class="section-label">Activated MW time series</div>', unsafe_allow_html=True)
-        st.plotly_chart(build_activation_mw_figure(filtered, directions), width="stretch", config=PLOT_CONFIG)
+        st.plotly_chart(
+            build_activation_mw_figure(timeseries_df, directions, show_range_slider=True),
+            width="stretch",
+            config=PLOT_CONFIG,
+        )
 
         st.markdown('<div class="section-label">Reserve MW time series</div>', unsafe_allow_html=True)
-        st.plotly_chart(build_reserve_mw_figure(filtered, directions), width="stretch", config=PLOT_CONFIG)
+        st.plotly_chart(
+            build_reserve_mw_figure(timeseries_df, directions, show_range_slider=True),
+            width="stretch",
+            config=PLOT_CONFIG,
+        )
 
         st.markdown('<div class="section-label">Activation portion time series</div>', unsafe_allow_html=True)
-        st.plotly_chart(build_timeseries_figure(filtered, directions), width="stretch", config=PLOT_CONFIG)
+        st.plotly_chart(
+            build_timeseries_figure(timeseries_df, directions, show_range_slider=True),
+            width="stretch",
+            config=PLOT_CONFIG,
+        )
 
         with st.expander("Database preview"):
-            st.dataframe(filtered.tail(200), width="stretch", hide_index=True)
+            st.dataframe(timeseries_df.tail(200), width="stretch", hide_index=True)
 
 
 if __name__ == "__main__":
