@@ -648,7 +648,6 @@ def filter_data(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
             min_value=min_date,
             max_value=max_date,
         )
-        hour_range = st.slider("Hour of day", 0, 23, (0, 23))
         day_types = st.multiselect("Day type", ["Weekday", "Weekend"], default=["Weekday", "Weekend"])
         directions = st.multiselect("Direction", ["Up", "Down"], default=["Up", "Down"])
 
@@ -660,8 +659,6 @@ def filter_data(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     filtered = df[
         (df["date"] >= start_date)
         & (df["date"] <= end_date)
-        & (df["hour_of_day"] >= hour_range[0])
-        & (df["hour_of_day"] <= hour_range[1])
         & (df["day_type"].isin(day_types))
     ].copy()
 
